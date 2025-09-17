@@ -1,0 +1,14 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Outputs and IPC dirs (keep folders via .gitkeep)
+responses/
+!responses/.gitkeep
+requests/
+!requests/.gitkeep
+requests/processing/
+!requests/processing/.gitkeep
+

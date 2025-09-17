@@ -1,0 +1,11 @@
+{
+  "op": "render_html",
+  "html": "<html><body><h1>Hello from raw HTML</h1></body></html>",
+  "viewport": { "width": 1280, "height": 800, "deviceScaleFactor": 1 },
+  "fullPage": true,
+  "waitUntil": "networkidle2",
+  "timeoutMs": 30000,
+  "screenshot": true,
+  "htmlOutput": true
+}
+

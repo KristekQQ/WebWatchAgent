@@ -1,0 +1,20 @@
+{
+  "name": "web-watcher",
+  "version": "1.0.0",
+  "description": "Local Web Watcher service using Puppeteer with filesystem IPC for Codex integration.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node src/watcher.js",
+    "start": "node src/watcher.js",
+    "clean": "node scripts/clean.mjs"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "puppeteer": "^22.15.0",
+    "uuid": "^9.0.1"
+  }
+}
+

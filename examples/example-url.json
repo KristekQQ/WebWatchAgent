@@ -1,0 +1,11 @@
+{
+  "op": "render_url",
+  "url": "https://example.com",
+  "viewport": { "width": 1280, "height": 800, "deviceScaleFactor": 1 },
+  "fullPage": true,
+  "waitUntil": "networkidle2",
+  "timeoutMs": 30000,
+  "screenshot": true,
+  "htmlOutput": true
+}
+
