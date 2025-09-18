@@ -29,6 +29,11 @@ import { writeFileAtomic, writeJSONAtomic, ensureDir } from './files.js';
  * @property {boolean=} htmlOutput
  * @property {number=} postWaitMs
  * @property {Array<PageAction>=} actions
+ * @property {string=} sessionId
+ * @property {Array<ExtractSpec>=} extract
+ * @property {boolean=} captureConsole
+ * @property {boolean=} captureNetwork
+ * @property {boolean=} screenshotOnEachAction
  */
 
 /**
@@ -44,13 +49,22 @@ import { writeFileAtomic, writeJSONAtomic, ensureDir } from './files.js';
  */
 
 /**
+ * @typedef {(
+ *   | { type: 'text', selector: string, all?: boolean, name?: string }
+ *   | { type: 'attr', selector: string, name: string, all?: boolean, key?: string }
+ *   | { type: 'html', selector: string, all?: boolean, name?: string }
+ *   | { type: 'exists', selector: string, name?: string }
+ * )} ExtractSpec
+ */
+
+/**
  * Process a single request with Puppeteer.
  * Writes outputs under responses/<id>/.
  * @param {import('puppeteer').Browser} browser
  * @param {RenderRequest} req
  * @param {string} responsesDir absolute path to responses dir
  */
-export async function processRequest(browser, req, responsesDir) {
+export async function processRequest(browser, req, responsesDir, context) {
   const id = req.id;
   const outDir = path.join(responsesDir, id);
   await ensureDir(outDir);
@@ -74,9 +88,34 @@ export async function processRequest(browser, req, responsesDir) {
 
   let errorMessage = undefined;
   let page;
+  /** @type {Array<any>} */
+  const consoleEvents = [];
+  /** @type {Array<any>} */
+  const networkEvents = [];
   try {
-    // One fresh page per request; this isolates state (cookies, console, etc.)
-    page = await browser.newPage();
+    // One fresh page per request; optionally reuse a BrowserContext via sessionId.
+    page = context ? await context.newPage() : await browser.newPage();
+
+    // Optional capture of console and network events for diagnostics
+    if (req.captureConsole) {
+      page.on('console', (msg) => {
+        consoleEvents.push({
+          type: msg.type(),
+          text: msg.text(),
+          ts: Date.now(),
+        });
+      });
+    }
+    if (req.captureNetwork) {
+      page.on('request', (req) => {
+        networkEvents.push({ phase: 'request', url: req.url(), method: req.method(), ts: Date.now() });
+      });
+      page.on('response', async (res) => {
+        let status = 0; let url = '';
+        try { status = res.status(); url = res.url(); } catch {}
+        networkEvents.push({ phase: 'response', url, status, ts: Date.now() });
+      });
+    }
 
     if (req.userAgent) {
       await page.setUserAgent(req.userAgent);
@@ -110,7 +149,7 @@ export async function processRequest(browser, req, responsesDir) {
 
     // Run scripted actions if provided (e.g., mute click, canvas wait, etc.)
     if (Array.isArray(req.actions) && req.actions.length > 0) {
-      await runActions(page, req.actions);
+      await runActions(page, req.actions, outDir, !!req.screenshotOnEachAction);
     }
 
     // Output after actions
@@ -121,6 +160,12 @@ export async function processRequest(browser, req, responsesDir) {
 
     if (req.screenshot) {
       await page.screenshot({ path: path.join(outDir, 'screenshot.png'), fullPage: !!req.fullPage });
+    }
+
+    // Extract requested data
+    if (Array.isArray(req.extract) && req.extract.length > 0) {
+      const extracted = await performExtracts(page, req.extract);
+      await writeFileAtomic(path.join(outDir, 'extract.json'), JSON.stringify(extracted, null, 2));
     }
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : String(err);
@@ -140,6 +185,11 @@ export async function processRequest(browser, req, responsesDir) {
   await writeJSONAtomic(metaPath, meta);
 
   const donePath = path.join(outDir, 'done.json');
+  // Write captured logs (best-effort)
+  try {
+    if (consoleEvents.length > 0) await writeFileAtomic(path.join(outDir, 'console.log.json'), JSON.stringify(consoleEvents, null, 2));
+    if (networkEvents.length > 0) await writeFileAtomic(path.join(outDir, 'network.log.json'), JSON.stringify(networkEvents, null, 2));
+  } catch {}
   if (errorMessage) {
     await writeJSONAtomic(donePath, { status: 'error', error: errorMessage });
     throw new Error(errorMessage);
@@ -157,9 +207,12 @@ export async function processRequest(browser, req, responsesDir) {
  *
  * @param {import('puppeteer').Page} page Puppeteer page instance.
  * @param {Array<PageAction>} actions Sequence of actions to execute.
+ * @param {string} outDir Output directory for optional step screenshots.
+ * @param {boolean} snapAfterEach If true, capture a screenshot after each action.
  */
-async function runActions(page, actions) {
-  for (const a of actions) {
+async function runActions(page, actions, outDir, snapAfterEach) {
+  for (let i = 0; i < actions.length; i++) {
+    const a = actions[i];
     const type = a?.type;
     try {
       if (type === 'waitForSelector' && a.selector) {
@@ -167,6 +220,12 @@ async function runActions(page, actions) {
       } else if (type === 'click' && a.selector) {
         await page.waitForSelector(a.selector, { timeout: a.timeoutMs ?? 30000 });
         await page.click(a.selector);
+      } else if (type === 'hover' && a.selector) {
+        await page.waitForSelector(a.selector, { timeout: a.timeoutMs ?? 30000 });
+        await page.hover(a.selector);
+      } else if (type === 'type' && a.selector && typeof a.text === 'string') {
+        await page.waitForSelector(a.selector, { timeout: a.timeoutMs ?? 30000 });
+        await page.type(a.selector, a.text, { delay: a.delay ?? 0 });
       } else if (type === 'clickAt' && typeof a.x === 'number' && typeof a.y === 'number') {
         await page.mouse.click(a.x, a.y);
       } else if (type === 'waitForTime' && typeof a.ms === 'number') {
@@ -177,6 +236,18 @@ async function runActions(page, actions) {
         await waitForCanvasPaint(page, a.timeoutMs ?? 60000, a.intervalMs ?? 500);
       } else if (type === 'muteHeuristic') {
         await clickMuteHeuristic(page);
+      } else if (type === 'screenshotElement' && a.selector) {
+        const el = await page.waitForSelector(a.selector, { timeout: a.timeoutMs ?? 30000 });
+        if (el) {
+          const file = a.file || `step-${String(i + 1).padStart(2, '0')}-element.png`;
+          await el.screenshot({ path: path.join(outDir, file) });
+        }
+      } else if (type === 'press' && a.key) {
+        await page.keyboard.press(a.key, { delay: a.delay ?? 0 });
+      }
+      if (snapAfterEach) {
+        const fname = `step-${String(i + 1).padStart(2, '0')}.png`;
+        await page.screenshot({ path: path.join(outDir, fname), fullPage: true });
       }
     } catch (e) {
       // Fail fast: surface the error in meta/done and stop further actions
@@ -253,4 +324,51 @@ async function waitForCanvasPaint(page, timeoutMs, intervalMs) {
     if (Date.now() - t0 > timeoutMs) throw new Error('waitForCanvasPaint timeout');
     await new Promise((r) => setTimeout(r, intervalMs));
   }
+}
+
+/**
+ * Extract data from the page based on provided specs.
+ * Returns an array of extraction results in the same order as specs.
+ * @param {import('puppeteer').Page} page
+ * @param {Array<ExtractSpec>} specs
+ */
+async function performExtracts(page, specs) {
+  /** @type {Array<any>} */
+  const results = [];
+  for (const s of specs) {
+    const type = s.type;
+    if (type === 'text') {
+      const { selector, all } = s;
+      const value = await page.evaluate(({ selector, all }) => {
+        const els = Array.from(document.querySelectorAll(selector));
+        if (all) return els.map((e) => (e.textContent || '').trim());
+        const el = els[0];
+        return el ? (el.textContent || '').trim() : null;
+      }, { selector, all: !!all });
+      results.push({ type, name: s.name, selector, value });
+    } else if (type === 'attr') {
+      const { selector, name, all } = s;
+      const value = await page.evaluate(({ selector, name, all }) => {
+        const els = Array.from(document.querySelectorAll(selector));
+        if (all) return els.map((e) => e.getAttribute(name));
+        const el = els[0];
+        return el ? el.getAttribute(name) : null;
+      }, { selector, name, all: !!all });
+      results.push({ type, key: s.key || name, selector, value });
+    } else if (type === 'html') {
+      const { selector, all } = s;
+      const value = await page.evaluate(({ selector, all }) => {
+        const els = Array.from(document.querySelectorAll(selector));
+        if (all) return els.map((e) => e.outerHTML);
+        const el = els[0];
+        return el ? el.outerHTML : null;
+      }, { selector, all: !!all });
+      results.push({ type, name: s.name, selector, value });
+    } else if (type === 'exists') {
+      const { selector } = s;
+      const value = await page.evaluate((selector) => !!document.querySelector(selector), selector);
+      results.push({ type, name: s.name, selector, value });
+    }
+  }
+  return results;
 }

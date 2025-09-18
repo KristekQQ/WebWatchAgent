@@ -78,6 +78,11 @@ export async function renderURL(url, opts = {}) {
     htmlOutput: opts.htmlOutput ?? true,
     postWaitMs: opts.postWaitMs,
     actions: opts.actions,
+    sessionId: opts.sessionId,
+    extract: opts.extract,
+    captureConsole: opts.captureConsole,
+    captureNetwork: opts.captureNetwork,
+    screenshotOnEachAction: opts.screenshotOnEachAction,
   };
   const reqPath = path.join(REQUESTS_DIR, `${id}.json`);
   await writeFileAtomic(reqPath, JSON.stringify(req, null, 2));
@@ -124,6 +129,11 @@ export async function renderHTML(html, opts = {}) {
     htmlOutput: opts.htmlOutput ?? true,
     postWaitMs: opts.postWaitMs,
     actions: opts.actions,
+    sessionId: opts.sessionId,
+    extract: opts.extract,
+    captureConsole: opts.captureConsole,
+    captureNetwork: opts.captureNetwork,
+    screenshotOnEachAction: opts.screenshotOnEachAction,
   };
   const reqPath = path.join(REQUESTS_DIR, `${id}.json`);
   await writeFileAtomic(reqPath, JSON.stringify(req, null, 2));

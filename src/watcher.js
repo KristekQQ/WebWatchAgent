@@ -88,8 +88,13 @@ function normalizeRequest(raw) {
 
   const postWaitMs = raw.postWaitMs;
   const actions = Array.isArray(raw.actions) ? raw.actions : undefined;
+  const sessionId = raw.sessionId ? String(raw.sessionId) : undefined;
+  const extract = Array.isArray(raw.extract) ? raw.extract : undefined;
+  const captureConsole = !!raw.captureConsole;
+  const captureNetwork = !!raw.captureNetwork;
+  const screenshotOnEachAction = !!raw.screenshotOnEachAction;
 
-  return { id, op, url: raw.url, html: raw.html, viewport, fullPage, waitUntil, timeoutMs, userAgent, extraHeaders, screenshot, htmlOutput, postWaitMs, actions };
+  return { id, op, url: raw.url, html: raw.html, viewport, fullPage, waitUntil, timeoutMs, userAgent, extraHeaders, screenshot, htmlOutput, postWaitMs, actions, sessionId, extract, captureConsole, captureNetwork, screenshotOnEachAction };
 }
 
 /** Entry point: start browser, wire up watcher, and handle shutdown. */
@@ -108,6 +113,9 @@ async function main() {
       '--no-sandbox'
     ],
   });
+
+  /** @type {Map<string, import('puppeteer').BrowserContext>} */
+  const sessionContexts = new Map();
 
   const watcher = chokidar.watch(path.join(REQUESTS_DIR, '*.json'), {
     ignoreInitial: false,
@@ -150,7 +158,15 @@ async function main() {
       await enqueue(async () => {
         const t0 = Date.now();
         try {
-          await processRequest(browser, req, RESPONSES_DIR);
+          let context = undefined;
+          if (req.sessionId) {
+            context = sessionContexts.get(req.sessionId);
+            if (!context) {
+              context = await browser.createIncognitoBrowserContext();
+              sessionContexts.set(req.sessionId, context);
+            }
+          }
+          await processRequest(browser, req, RESPONSES_DIR, context);
           const dt = Date.now() - t0;
           console.log(`[OK] id=${req.id} in ${dt}ms`);
         } catch (err) {

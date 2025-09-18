@@ -31,7 +31,12 @@ Scope of this file: whole repo.
   "screenshot": true,
   "htmlOutput": true,
   "postWaitMs": 0,
-  "actions": [ /* see Action DSL */ ]
+  "sessionId": "optional persistent context id",
+  "captureConsole": false,
+  "captureNetwork": false,
+  "screenshotOnEachAction": false,
+  "actions": [ /* see Action DSL */ ],
+  "extract": [ /* optional extract specs */ ]
 }
 ```
 
@@ -43,6 +48,10 @@ Scope of this file: whole repo.
 - `{ "type": "waitForFunction", "fn": "JS expression", "timeoutMs"?: number }`
 - `{ "type": "waitForCanvasPaint", "timeoutMs"?: number, "intervalMs"?: number }`
 - `{ "type": "muteHeuristic" }`  (best‑effort click on a mute/no‑sound control)
+- `{ "type": "hover", "selector": "CSS" }`
+- `{ "type": "type", "selector": "CSS", "text": "value", "delay"?: number }`
+- `{ "type": "press", "key": "Enter" }`
+- `{ "type": "screenshotElement", "selector": "CSS", "file"?: "name.png" }`
 
 Notes
 - Use selector‑based actions when possible; prefer `click` over `clickAt`.
@@ -54,6 +63,9 @@ Notes
 - `page.html`: HTML after actions (if `htmlOutput: true`).
 - `screenshot.png`: full‑page screenshot (if `screenshot: true`).
 - `done.json`: `{ status: "ok" }` or `{ status: "error", error }` (written last).
+- `console.log.json` (if `captureConsole: true`)
+- `network.log.json` (if `captureNetwork: true`)
+- `extract.json` (if `extract` provided)
 
 ## Client Helper (Node ESM)
 ```

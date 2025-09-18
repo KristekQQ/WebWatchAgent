@@ -50,6 +50,10 @@ Request JSON schema:
   "screenshot": true,
   "htmlOutput": true,
   "postWaitMs": 0,
+  "sessionId": "optional persistent context id",
+  "captureConsole": false,
+  "captureNetwork": false,
+  "screenshotOnEachAction": false,
   "actions": [
     { "type": "waitForSelector", "selector": "#start" },
     { "type": "click", "selector": "button.mute" },
@@ -57,7 +61,11 @@ Request JSON schema:
     { "type": "waitForTime", "ms": 5000 },
     { "type": "waitForFunction", "fn": "document.querySelector('canvas') != null" },
     { "type": "waitForCanvasPaint", "timeoutMs": 60000 },
-    { "type": "muteHeuristic" }
+    { "type": "muteHeuristic" },
+    { "type": "hover", "selector": "#btn" },
+    { "type": "type", "selector": "#input", "text": "hello", "delay": 20 },
+    { "type": "press", "key": "Enter" },
+    { "type": "screenshotElement", "selector": "#panel", "file": "panel.png" }
   ]
 }
 ```
@@ -147,3 +155,35 @@ Examples:
 - `npm run dev` — start the watcher (same as `start`)
 - `npm run start` — start the watcher
 - `npm run clean` — clear `requests/` and `responses/` contents (keeps folders)
+- `npm run submit` — CLI to submit a job (`ww-submit`)
+
+### CLI quickstart
+
+```
+# URL mode
+ww-submit url https://example.com --timeout 60000 --post-wait 2000 --screenshot --html
+
+# HTML mode
+ww-submit html ./examples/sample.html --wait-until networkidle2 --timeout 45000
+
+# With actions and extract specs from files
+ww-submit url http://host/app \
+  --actions ./actions.json \
+  --extract ./extract.json \
+  --console --network --steps --client-timeout 180000
+```
+### Extract structured data (optional)
+
+Add an `extract` array to the request to save `responses/<id>/extract.json`:
+
+```
+"extract": [
+  { "type": "text", "selector": "h1" },
+  { "type": "attr", "selector": "img.logo", "name": "src" },
+  { "type": "exists", "selector": "#consent-accept" }
+]
+```
+
+### Persistent session (optional)
+
+Provide `sessionId` to persist cookies/localStorage across multiple requests. Each job still uses a fresh page, but shares the same incognito browser context.

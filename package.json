@@ -9,7 +9,11 @@
   "scripts": {
     "dev": "node src/watcher.js",
     "start": "node src/watcher.js",
-    "clean": "node scripts/clean.mjs"
+    "clean": "node scripts/clean.mjs",
+    "submit": "node bin/ww-submit.mjs"
+  },
+  "bin": {
+    "ww-submit": "bin/ww-submit.mjs"
   },
   "dependencies": {
     "chokidar": "^3.6.0",
@@ -17,4 +21,3 @@
     "uuid": "^9.0.1"
   }
 }
-
